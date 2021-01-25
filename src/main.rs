@@ -2,6 +2,8 @@ use svalue::Bittrex;
 use svalue::Bittrex::BittrexAdapter;
 use svalue::Huobi;
 use svalue::Huobi::HuobiAdapter;
+use svalue::Kraken;
+use svalue::Kraken::KrakenCore;
 // use svalue::Bittrex::BaseExchangeAdapter;
 use svalue::exchange::BaseExchangeAdapter;
 use svalue::exchange::{Pair, Pairs};
@@ -24,11 +26,20 @@ fn test_pairs() -> Pairs {
 async fn main() {
     // let _res = Bittrex::get_bittrex_pairs("https://api.bittrex.com/v3/markets", "/", "").await;
     let tpairs: Pairs = test_pairs();
+
+    let mut kc: KrakenCore = KrakenCore::new();
+
+    let lp = kc.load_pairs().await.unwrap();
+    println!("Kraken pairs: {:#?}", lp);
+    /*
     let mut hb = Huobi::new();
     let mut btx = Bittrex::new();
     let hpairs: Pairs = hb.get_pairs().await.unwrap();
     let bpairs: Pairs = btx.get_pairs().await.unwrap();
     println!("Huobi Pairs: {}", hpairs.len());
+    println!("Bittrex Pairs: {}", bpairs.len());
+    println!("Huobi Adapter - Name: {} || Code: {}", hb.name(), hb.code());
+    println!("Bittrex Adapter - Name: {} || Code: {}", btx.name(), btx.code());
     println!("Bittrex Pairs: {}", bpairs.len());
     for p in tpairs {
         let hrate = hb.get_rate(p.from_coin.as_str(), p.to_coin.as_str()).await.unwrap();
@@ -36,6 +47,9 @@ async fn main() {
         let brate = btx.get_rate(p.from_coin.as_str(), p.to_coin.as_str()).await.unwrap();
         println!("{} exchange rate (bittrex): {:#?}", p.symbol(), brate);
     }
+    */
+
+
     // let mut btx: BittrexAdapter = BittrexAdapter::new();
     // let pairs: Pairs = btx.get_pairs().await.unwrap();
     // let _res = Bittrex::get_bittrex_pairs().await;

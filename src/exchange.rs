@@ -104,6 +104,8 @@ pub struct ExchangeAdapter {
 #[async_trait]
 pub trait BaseExchangeAdapter<'a> {
     // const MARKET_API: &'a str;
+    fn name(&self) -> &'a str;
+    fn code(&self) -> &'a str;
     fn build_uri(&self, uri: &str, endpoint: &str) -> String;
     async fn json_get(&self, uri: &str, endpoint: &str) -> Result<HashMap<String, String>, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_pairs(&mut self) -> Result<Pairs, Box<dyn std::error::Error + Send + Sync>>;
@@ -111,5 +113,6 @@ pub trait BaseExchangeAdapter<'a> {
     async fn has_pair(&mut self, from_coin: &str, to_coin: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
     // fn new() -> &'a mut Self;
     fn new() -> Self;
+
 }
 

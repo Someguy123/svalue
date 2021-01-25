@@ -73,6 +73,12 @@ pub async fn get_bittrex_pairs() -> Result<Vec<BittrexPair>, Box<dyn std::error:
 #[async_trait]
 impl <'a> BaseExchangeAdapter<'a> for BittrexAdapter {
     // const MARKET_API: &'a str = BITTREX_API;
+    fn name(&self) -> &'a str {
+        "Bittrex"
+    }
+    fn code(&self) -> &'a str {
+        "bittrex"
+    }
 
     fn build_uri(&self, uri: &str, endpoint: &str) -> String {
         return adapter_core::build_uri(self.market_api.as_str(), uri, endpoint)

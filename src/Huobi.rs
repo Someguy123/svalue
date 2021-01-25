@@ -104,7 +104,12 @@ pub struct HuobiAdapter {
 #[async_trait]
 impl <'a> BaseExchangeAdapter<'a> for HuobiAdapter {
     // const MARKET_API: &'a str = BITTREX_API;
-
+    fn name(&self) -> &'a str {
+        "Huobi"
+    }
+    fn code(&self) -> &'a str {
+        "huobi"
+    }
     fn build_uri(&self, uri: &str, endpoint: &str) -> String {
         return adapter_core::build_uri(self.market_api.as_str(), uri, endpoint)
     }
