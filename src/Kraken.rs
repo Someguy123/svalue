@@ -30,6 +30,30 @@ pub struct KrakenPairs {
     result: HashMap<String, HashMap<String, serde_json::Value>>
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct KrakenTickerTick {
+    #[serde(rename="a")]
+    ask: Vec<String>,
+    #[serde(rename="b")]
+    bid: Vec<String>,
+    #[serde(rename="c")]
+    last: Vec<String>,
+    #[serde(rename="o")]
+    open: String,
+    #[serde(rename="h")]
+    high: Vec<String>,
+    #[serde(rename="l")]
+    low: Vec<String>,
+    #[serde(rename="v")]
+    volume: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct KrakenTicker {
+    error: Vec<String>,
+    result: HashMap<String, KrakenTickerTick>
+}
+
 pub struct KrakenCore<'a> {
     provides: Vec<String>,
     pairs: Vec<String>,
@@ -105,6 +129,18 @@ impl <'a>KrakenCore<'a> {
         }
         Ok(selfprov.clone())
     }
+
+    pub async fn get_ticker(&self, pair: &str) -> Result<KrakenTicker, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!("{}{}", KRAKEN_TICKER, pair);
+        let resp: reqwest::Response = reqwest::get(&String::from(url)).await.unwrap();
+        let body: String = resp.text().await.unwrap();
+        // let v: serde_json::Value = serde_json::from_str(body.as_str()).unwrap();
+        // let selfpairs = &mut self.pairs;
+        let v: KrakenTicker = serde_json::from_str(body.as_str()).unwrap();
+        // let kres = v.result;
+        Ok(v)
+    }
+
     pub fn new() -> Self {
         let symbol_map: HashMap<&'a str, &'a str> = [
             ("XXDG", "DOGE"),
