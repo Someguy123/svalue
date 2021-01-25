@@ -122,6 +122,9 @@ impl <'a> BaseExchangeAdapter<'a> for BittrexAdapter {
             },
             high: Decimal::new(0, 8),
             low: Decimal::new(0, 8),
+            open: Decimal::new(0, 8),
+            close: Decimal::new(0, 8),
+            volume: Decimal::new(0, 8),
         })
     }
 

@@ -39,5 +39,7 @@
 pub mod adapter_core;
 pub mod exchange;
 pub mod Bittrex;
+pub mod huobi_test;
+pub mod Huobi;
 // pub mod main;
 

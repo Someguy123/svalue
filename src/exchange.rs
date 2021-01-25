@@ -21,6 +21,15 @@ pub struct Pair {
     pub from_coin: String,
     pub to_coin: String,
 }
+
+impl Pair {
+    pub fn from_str(from_coin: &str, to_coin: &str) -> Self {
+        Pair { from_coin: String::from(from_coin), to_coin: String::from(to_coin) }
+    }
+    pub fn symbol(&self) -> String {
+        format!("{}_{}", self.from_coin, self.to_coin)
+    }
+}
 impl fmt::Debug for Pair {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("Pair")
@@ -44,6 +53,9 @@ pub struct ExchangeRate {
     pub ask: Decimal,
     pub low: Decimal,
     pub high: Decimal,
+    pub volume: Decimal,
+    pub open: Decimal,
+    pub close: Decimal,
     pub pair: Pair
 }
 
@@ -55,6 +67,9 @@ impl Clone for ExchangeRate {
             ask: Decimal::from_str(self.ask.to_string().as_str()).unwrap(),
             low: Decimal::from_str(self.low.to_string().as_str()).unwrap(),
             high: Decimal::from_str(self.high.to_string().as_str()).unwrap(),
+            volume: Decimal::from_str(self.volume.to_string().as_str()).unwrap(),
+            open: Decimal::from_str(self.open.to_string().as_str()).unwrap(),
+            close: Decimal::from_str(self.close.to_string().as_str()).unwrap(),
             pair: self.pair.clone()
         }
     }
