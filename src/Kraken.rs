@@ -1,4 +1,4 @@
-use crate::exchange::{BaseExchangeAdapter, Pair, Pairs, ExchangeRate};
+use crate::exchange::{BaseExchangeAdapter, Pair, Pairs, ExchangeRate, PairNotFound};
 use crate::adapter_core;
 use serde::{Deserialize, Serialize};
 extern crate futures;
@@ -12,17 +12,19 @@ use std::str;
 use std::str::FromStr;
 use std::fmt;
 use std::collections::HashMap;
+use std::future::Future;
 // use std::f64::
 use rust_decimal::Decimal;
 use rust_decimal::prelude::FromPrimitive;
 use async_trait::async_trait;
 
+use std::panic;
 
 const KRAKEN_BASE: &str = "https://api.kraken.com/0/public";
 const KRAKEN_PAIRS: &str = "https://api.kraken.com/0/public/AssetPairs?info=fees";
 const KRAKEN_TICKER: &str = "https://api.kraken.com/0/public/Ticker?pair=";
 
-
+type BoxErr = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct KrakenPairs {
@@ -76,7 +78,7 @@ pub fn find_base(pair: &str, known_bases: Vec<&str>) -> Option<String> {
 
 // #[async_trait]
 impl <'a>KrakenCore<'a> {
-    pub async fn _load_pairs(&mut self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn _load_pairs(&mut self) -> Result<Vec<String>, BoxErr> {
         let resp: reqwest::Response = reqwest::get(KRAKEN_PAIRS).await.unwrap();
         let body: String = resp.text().await.unwrap();
         // let v: serde_json::Value = serde_json::from_str(body.as_str()).unwrap();
@@ -102,7 +104,7 @@ impl <'a>KrakenCore<'a> {
     //     }
     //     return None
     // }
-    pub async fn load_pairs(&mut self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn load_pairs(&mut self) -> Result<Vec<String>, BoxErr> {
         self._load_pairs().await?;
         let selfpairs = self.pairs.clone();
         let mut selfprov = &mut self.provides;
@@ -130,15 +132,83 @@ impl <'a>KrakenCore<'a> {
         Ok(selfprov.clone())
     }
 
-    pub async fn get_ticker(&self, pair: &str) -> Result<KrakenTicker, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_ticker(&self, pair: &str) -> Result<KrakenTicker, BoxErr> {
         let url = format!("{}{}", KRAKEN_TICKER, pair);
         let resp: reqwest::Response = reqwest::get(&String::from(url)).await.unwrap();
         let body: String = resp.text().await.unwrap();
         // let v: serde_json::Value = serde_json::from_str(body.as_str()).unwrap();
         // let selfpairs = &mut self.pairs;
+        let z: serde_json::Value = serde_json::from_str(body.as_str()).unwrap();
+        let za = z["error"].as_array();
+        if let Some(x) = &za {
+            if !x.is_empty() {
+                return Err(Box::new(PairNotFound::new(pair)))
+            }
+        }
         let v: KrakenTicker = serde_json::from_str(body.as_str()).unwrap();
         // let kres = v.result;
         Ok(v)
+    }
+
+    pub async fn get_ticker_main(&mut self, from_coin: &str, to_coin: &str) -> Result<KrakenTicker, BoxErr> {
+        let from_coin = String::from(from_coin).to_ascii_uppercase();
+        let to_coin = String::from(to_coin).to_ascii_uppercase();
+        let mut symx = format!("{from_coin}_{to_coin}", from_coin=from_coin, to_coin=to_coin);
+        if self.known_pairs.contains_key(&symx.as_str()) {
+            let xpair = self.known_pairs[symx.as_str()];
+            println!("Found pair {} in known_pairs", xpair);
+            return Ok(self.get_ticker(xpair).await?)
+        }
+        let mut from_coins = vec![from_coin.as_str()];
+        let mut to_coins = vec![to_coin.as_str()];
+        if self.symbol_map_expected.contains_key(&from_coin.as_str()) {
+            from_coins = self.symbol_map_expected[from_coin.as_str()].clone();
+        }
+        if self.symbol_map_expected.contains_key(&to_coin.as_str()) {
+            to_coins = self.symbol_map_expected[to_coin.as_str()].clone();
+        }
+
+        for fc in &from_coins {
+            for tc in &to_coins {
+                let xfc = &fc.to_string();
+                let xtc = &tc.to_string();
+                let mut fsym = format!("{}{}", xfc, xtc);
+                let mut symk = format!("{}_{}", xfc, xtc);
+                let fsym = fsym.as_mut_str();
+                // let symk = symk.as_mut_str();
+                // let bs = &self;
+                // const tkcall: dyn Future<Result<KrakenTicker, BoxErr>> = self.get_ticker(fsym);
+                let kcore = KrakenCore::new();
+                // let mut tkcall = KrakenCore::new().get_ticker(fsym.clone());
+                let result = panic::catch_unwind(|| {
+                    // let res: Result<KrakenTicker, BoxErr> = kcore.get_ticker(fsym).await;
+                    return kcore.get_ticker(fsym);
+                });
+                // let res: Result<KrakenTicker, BoxErr> = self.get_ticker(fsym).await;
+                if result.is_err() {
+                    println!("Kraken pair '{}' threw an error. Trying a different pair...", fsym);
+                    continue;
+                }
+                // let result = panic::catch_unwind(|| async {
+
+                let res = result.unwrap().await;
+                if res.is_err() {
+                    println!("Kraken pair '{}' threw an error. Trying a different pair...", fsym);
+                    continue;
+                }
+                // });
+
+                println!("Kraken pair '{}' was successful! Saving to known pairs for next time", fsym);
+                
+                // let xsymk = symk.as_str();
+                // let xfsym = fsym.as_str();
+                // let knwpairs = &mut self.known_pairs;
+                // &knwpairs.insert(fsym, symk);
+                let unwrapped = res.unwrap();
+                return Ok(unwrapped);
+            }
+        }
+        Err(Box::new(PairNotFound::new(format!("{} / {}", from_coin, to_coin).as_str())))
     }
 
     pub fn new() -> Self {

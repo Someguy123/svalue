@@ -30,7 +30,7 @@ async fn main() {
     let mut kc: KrakenCore = KrakenCore::new();
 
     // let lp = kc.load_pairs().await.unwrap();
-    let lp = kc.get_ticker("EOSXBT").await.unwrap();
+    let lp = kc.get_ticker_main("DOGE", "BTC").await.unwrap();
     println!("Kraken pairs: {:#?}", lp);
     /*
     let mut hb = Huobi::new();

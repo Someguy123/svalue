@@ -14,6 +14,9 @@ use std::str;
 use std::str::FromStr;
 use std::fmt;
 use std::collections::HashMap;
+use std::io::{Error, ErrorKind};
+use std::{error};
+use std::fmt::Display;
 use async_trait::async_trait;
 
 // #[derive(Copy)]
@@ -116,3 +119,28 @@ pub trait BaseExchangeAdapter<'a> {
 
 }
 
+
+#[derive(Debug)]
+pub struct PairNotFound {
+    v: String,
+}
+
+impl PairNotFound {
+    pub fn new(pair: &str) -> PairNotFound {
+        PairNotFound {
+            v: format!("The requested pair '{}' does not exist!", pair).to_string()
+        }
+    }
+
+    pub fn change_message(&mut self, new_message: &str) {
+        self.v = new_message.to_string();
+    }
+}
+
+impl std::error::Error for PairNotFound {}
+
+impl Display for PairNotFound {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "PairNotFound: {}", &self.v)
+    }
+}
