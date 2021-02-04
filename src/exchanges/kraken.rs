@@ -255,7 +255,8 @@ impl <'a>KrakenAdapter<'a> {
                 // let knwpairs = &mut self.known_pairs;
                 // &knwpairs.insert(fsym, symk);
                 let unwrapped = res.unwrap();
-                return Ok(unwrapped.result[fsym].clone());
+                let rkeys: Vec<&String> = unwrapped.result.keys().collect();
+                return Ok(unwrapped.result[rkeys[0]].clone());
             }
         }
         Err(Box::new(PairNotFound::new(format!("{} / {}", from_coin, to_coin).as_str())))
