@@ -23,7 +23,7 @@ pub type AdapterBox = Box<dyn StdExAdapter<'static>>;
 pub struct ExchangeManager {
     // exchanges: HashMap<&'a str, Box<dyn BaseExchangeAdapter<'a>>>,
     // exchanges: HashMap<&'a str, Box<dyn AdapterCombo<'a> + Sized>>,
-    exchanges: Vec<Box<dyn AdapterCombo<'static>>>,
+    exchanges: Vec<Box<&'static dyn AdapterCombo<'static>>>,
     pair_map: HashMap<String, Vec<String>>,
 }
 // impl<'a, T: BaseExchangeAdapter<'a, T>> ExchangeManager<'a, T> {
@@ -39,7 +39,7 @@ impl<'a> ExchangeManager {
         // let exs: HashMap<&'a str, Box<dyn AdapterCombo<'a>>> = HashMap::new();
         // let exs: HashMap<&'a str, Box<dyn AdapterCombo<'a>>> = HashMap::new();
         // let exs: HashMap<String, &Box<dyn AdapterCombo<'static>>> = HashMap::new();
-        let exs: Vec<Box<dyn AdapterCombo<'static>>> = vec![];
+        let exs: Vec<Box<&dyn AdapterCombo<'static>>> = vec![];
         ExchangeManager {
             exchanges: exs,
             pair_map: HashMap::new()
@@ -47,25 +47,31 @@ impl<'a> ExchangeManager {
     }
     pub fn add_exchange_pair(&mut self, ex: Box<dyn AdapterCombo<'static>>, pair: String)
         -> bool {
+        let excode: String = String::from(ex.code().clone());
+
         let origex: *mut dyn AdapterCombo<'static> = Box::into_raw(ex);
+
         // let zex = origex.clone();
-        let mut exch = Box::new(origex.clone());
+        // let mut exch = Box::new(newex.clone());
         // let mut exchs: &mut HashMap<String, &'static Box<dyn AdapterCombo<'static>>> = &mut self
         //     .exchanges;
-        let mut exchs: &mut Vec<Box<dyn AdapterCombo<'static>>> = &mut self.exchanges;
+        let mut exchs: &mut Vec<Box<&'static dyn AdapterCombo<'static>>> = &mut self.exchanges;
 
-        let excode: String = String::from(exch.code().clone());
-
-        let mut has_exch: bool = false;
-        for x in exchs {
-            if x.code() == excode {
-                has_exch = true;
+        unsafe {
+            let refex = origex.as_ref().unwrap();
+            let newex = refex.clone();
+            // let mut exch = Box::new(newex.clone());
+            let mut has_exch: bool = false;
+            for x in exchs {
+                if x.code() == excode {
+                    has_exch = true;
+                }
             }
-        }
 
-        // if !exchs.contains_key(&excode.clone()) {
-        if ! has_exch {
-            exchs.insert(exchs.len(), Box::new(origex.clone()));
+            // if !exchs.contains_key(&excode.clone()) {
+            if !has_exch {
+                exchs.insert(exchs.len(), Box::new(newex.clone().deref()));
+            }
         }
 
         let xpairs: &mut HashMap<String, Vec<String>> = &mut self.pair_map;
@@ -121,10 +127,10 @@ impl<'a> ExchangeManager {
         xpairs.contains_key(&pair.symbol())
     }
 
-    pub fn get_exchange(&mut self, code: String) -> Option<&mut Box<dyn AdapterCombo<'static>>> {
+    pub fn get_exchange(&mut self, code: String) -> Option<&mut Box<&'static dyn AdapterCombo<'static>>> {
         // let mut exchs: &mut HashMap<String, &'static Box<dyn AdapterCombo<'static>>> = &mut self
         //             .exchanges;
-        let mut exchs: &mut Vec<Box<dyn AdapterCombo<'static>>> = &mut self.exchanges;
+        let mut exchs: &mut Vec<Box<&'static dyn AdapterCombo<'static>>> = &mut self.exchanges;
         for v in exchs {
             if v.code().to_ascii_lowercase() == code.to_ascii_uppercase() {
                 return Some(v);
@@ -145,7 +151,7 @@ impl<'a> ExchangeManager {
         // let mut ex: dyn StdExAdapter<'static> = Box::into_raw(_ex);
         // let mut ex: &mut &impl AdapterCombo<'a> = &mut _ex.deref().deref().deref();
         let mut _exch = self.get_exchange(exname.clone());
-        let mut exch: &mut Box<dyn AdapterCombo<'static>> = _exch.unwrap();
+        let mut exch: &mut Box<&'static dyn AdapterCombo<'static>> = _exch.unwrap();
         let exrate = exch.get_rate(pair.from_coin.as_str(), pair.to_coin.as_str()).await?;
 
         // let exrate = exch.clone().get_rate(
