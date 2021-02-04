@@ -7,7 +7,7 @@
 // use svalue::Bittrex::BaseExchangeAdapter;
 use svalue::exchange::{Pair, Pairs, StdExAdapter, AdapterCombo};
 use svalue::exchanges;
-use svalue::exchanges::{ADAPTERS, ExchangeManager};
+use svalue::exchanges::{ BittrexAdapter, KrakenAdapter, HuobiAdapter};
 use log::{info, trace, warn};
 use svalue::adapter_core::BoxErrGlobal;
 
@@ -29,34 +29,54 @@ fn test_pairs() -> Pairs {
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
     // let _res = Bittrex::get_bittrex_pairs("https://api.bittrex.com/v3/markets", "/", "").await;
+    let adapters: Vec<Box<dyn AdapterCombo<'static>>> = vec![
+        Box::new(BittrexAdapter::new()),
+        Box::new(KrakenAdapter::new()),
+        Box::new(HuobiAdapter::new()),
+    ];
     let tpairs: Pairs = test_pairs();
     // type xadapters = impl KrakenAdapter + HuobiAdapter + BittrexAdapter;
-    let mut exm = ExchangeManager::new();
-    for a in ADAPTERS {
+    // let mut exm = ExchangeManager::new();
+    for a in adapters {
         // unsafe {
             // let _adp: *mut Option<dyn AdapterCombo> = Box::into_raw(a);
             // if let Some(adp) = _adp {
-        exm.register(a.clone().as_mut())
+        // exm.register(a.clone().as_mut())
             // }
         // }
+        let mut adp = a;
+
+        for p in &tpairs {
+            println!();
+            let lp = adp.get_rate(
+                p.from_coin.as_str(), p.to_coin.as_str()
+            ).await;
+            if lp.is_err() {
+                warn!("Failed to get exchange rate for pair: {}", p);
+                warn!("Error for pair {} is: {}", p, lp.unwrap_err().to_string());
+                continue;
+            }
+            let lres = lp.unwrap();
+            println!("( {} ) Exchange rates for pair {} are: {:#?}", adp.name(), p, lres);
+        }
     }
     // exm.register(&mut KrakenAdapter::new()).await?;
     // exm.register(&mut HuobiAdapter::new()).await?;
     // exm.register(&mut BittrexAdapter::new()).await?;
 
-    for p in tpairs {
-        println!();
-        let lp = exm.get_rate(
-            p.from_coin.as_str(), p.to_coin.as_str()
-        ).await;
-        if lp.is_err() {
-            warn!("Failed to get exchange rate for pair: {}", p);
-            warn!("Error for pair {} is: {}", p, lp.unwrap_err().to_string());
-            continue;
-        }
-        let lres = lp.unwrap();
-        println!("Exchange rates for pair {} are: {:#?}", p, lres);
-    }
+    // for p in tpairs {
+    //     println!();
+    //     let lp = exm.get_rate(
+    //         p.from_coin.as_str(), p.to_coin.as_str()
+    //     ).await;
+    //     if lp.is_err() {
+    //         warn!("Failed to get exchange rate for pair: {}", p);
+    //         warn!("Error for pair {} is: {}", p, lp.unwrap_err().to_string());
+    //         continue;
+    //     }
+    //     let lres = lp.unwrap();
+    //     println!("Exchange rates for pair {} are: {:#?}", p, lres);
+    // }
     Ok(())
     /*
     let mut kc: KrakenCore = KrakenCore::new();
