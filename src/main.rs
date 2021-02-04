@@ -29,28 +29,33 @@ fn test_pairs() -> Pairs {
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
     // let _res = Bittrex::get_bittrex_pairs("https://api.bittrex.com/v3/markets", "/", "").await;
-    let adapters: Vec<Box<dyn AdapterCombo<'static>>> = vec![
+    let adapters: &'static mut Vec<Box<dyn AdapterCombo<'static>>> = &mut vec![
         Box::new(BittrexAdapter::new()),
         Box::new(KrakenAdapter::new()),
         Box::new(HuobiAdapter::new()),
     ];
+
+
+
     let tpairs: Pairs = test_pairs();
     // type xadapters = impl KrakenAdapter + HuobiAdapter + BittrexAdapter;
-    let mut exm = ExchangeManager::new();
+    // unsafe {
+    let mut exm = ExchangeManager::new(adapters);
+    // let newadapters = exm.exchanges.iter_mut().into_slice();
 
-    for a in adapters {
-        // unsafe {
-            // let _adp: *mut Option<dyn AdapterCombo> = Box::into_raw(a);
-            // if let Some(adp) = _adp {
-        // exm.register(a.clone().as_mut())
-            // }
-        // }
-        exm.register(a);
-
-        // let mut adp = a;
-
-
-    }
+    // for mut a in newadapters.iter_mut() {
+    //     // unsafe {
+    //         // let _adp: *mut Option<dyn AdapterCombo> = Box::into_raw(a);
+    //         // if let Some(adp) = _adp {
+    //     // exm.register(a.clone().as_mut())
+    //         // }
+    //     // }
+    //     exm.register( a);
+    //
+    //     // let mut adp = a;
+    //
+    //
+    // }
     for p in &tpairs {
         println!();
         let lp = exm.get_rate(
@@ -64,7 +69,7 @@ async fn main() -> Result<(), std::io::Error> {
         let lres = lp.unwrap();
         println!("Exchange rates for pair {} are: {:#?}", p, lres);
     }
-
+    // }
     // exm.register(&mut KrakenAdapter::new()).await?;
     // exm.register(&mut HuobiAdapter::new()).await?;
     // exm.register(&mut BittrexAdapter::new()).await?;

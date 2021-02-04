@@ -6,7 +6,7 @@ use serde::de::StdError;
 use crate::adapter_core::{BoxErrGlobal, BoxErr};
 use log::{info, trace, warn};
 use std::ops::{Deref, DerefMut};
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::alloc::Global;
 
 
@@ -23,8 +23,8 @@ pub type AdapterBox = Box<dyn StdExAdapter<'static>>;
 pub struct ExchangeManager {
     // exchanges: HashMap<&'a str, Box<dyn BaseExchangeAdapter<'a>>>,
     // exchanges: HashMap<&'a str, Box<dyn AdapterCombo<'a> + Sized>>,
-    exchanges: Vec<Box<&'static dyn AdapterCombo<'static>>>,
-    pair_map: HashMap<String, Vec<String>>,
+    pub exchanges: &'static mut Vec<Box<dyn AdapterCombo<'static>>>,
+    pub pair_map: HashMap<String, Vec<String>>,
 }
 // impl<'a, T: BaseExchangeAdapter<'a, T>> ExchangeManager<'a, T> {
 // impl<'a, X: StdExAdapter<'static>> ExchangeManager<X> {
@@ -34,45 +34,59 @@ pub struct RateResult {
     code: String
 }
 
+impl Clone for RateResult {
+    fn clone(&self) -> RateResult {
+        RateResult { rate: self.rate.clone(), code: self.code.clone() }
+    }
+}
+
 impl<'a> ExchangeManager {
-    pub fn new() -> ExchangeManager {
+    pub fn new(adapters: &'static mut Vec<Box<dyn AdapterCombo<'static>>>) -> ExchangeManager {
         // let exs: HashMap<&'a str, Box<dyn AdapterCombo<'a>>> = HashMap::new();
         // let exs: HashMap<&'a str, Box<dyn AdapterCombo<'a>>> = HashMap::new();
         // let exs: HashMap<String, &Box<dyn AdapterCombo<'static>>> = HashMap::new();
-        let exs: Vec<Box<&dyn AdapterCombo<'static>>> = vec![];
-        ExchangeManager {
-            exchanges: exs,
+        // let xadapters = adapters.iter_mut().into_slice();
+        // let exs: Vec<Box<&'a dyn AdapterCombo<'a>>> = vec![];
+        let mut exm = ExchangeManager {
+            exchanges: adapters,
             pair_map: HashMap::new()
-        }
+        };
+
+        // for a in xadapters {
+        //     exm.register(a);
+        // }
+        exm
     }
-    pub fn add_exchange_pair(&mut self, ex: Box<dyn AdapterCombo<'static>>, pair: String)
+    pub fn add_exchange_pair(&mut self, ex: &mut Box<dyn AdapterCombo<'static>>, pair: String)
         -> bool {
         let excode: String = String::from(ex.code().clone());
 
-        let origex: *mut dyn AdapterCombo<'static> = Box::into_raw(ex);
+        // let origex: *mut dyn AdapterCombo<'static> = Box::into_raw(ex);
 
         // let zex = origex.clone();
         // let mut exch = Box::new(newex.clone());
         // let mut exchs: &mut HashMap<String, &'static Box<dyn AdapterCombo<'static>>> = &mut self
         //     .exchanges;
-        let mut exchs: &mut Vec<Box<&'static dyn AdapterCombo<'static>>> = &mut self.exchanges;
-
-        unsafe {
-            let refex = origex.as_ref().unwrap();
-            let newex = refex.clone();
-            // let mut exch = Box::new(newex.clone());
-            let mut has_exch: bool = false;
-            for x in exchs {
-                if x.code() == excode {
-                    has_exch = true;
-                }
-            }
-
-            // if !exchs.contains_key(&excode.clone()) {
-            if !has_exch {
-                exchs.insert(exchs.len(), Box::new(newex.clone().deref()));
-            }
-        }
+        // let mut exchs: &mut Vec<Box<dyn AdapterCombo<'static>>> = &mut self.exchanges;
+        //
+        // // unsafe {
+        //     // let refex = origex.as_ref().unwrap();
+        // // let newex: &'a dyn AdapterCombo<'a> = ex.clone();
+        // // let mut exch = Box::new(newex.clone());
+        // let mut has_exch: bool = false;
+        // for x in exchs {
+        //     if x.code() == excode {
+        //         has_exch = true;
+        //     }
+        // }
+        //
+        // // if !exchs.contains_key(&excode.clone()) {
+        // if !has_exch {
+        //     let ex_adapter: &'a dyn AdapterCombo<'a> = newex.clone();
+        //     let add_ex: Box<&'a dyn AdapterCombo<'a>, Global> = Box::new(ex_adapter);
+        //     exchs.insert(exchs.len(), add_ex);
+        // }
+        // }
 
         let xpairs: &mut HashMap<String, Vec<String>> = &mut self.pair_map;
 
@@ -99,24 +113,31 @@ impl<'a> ExchangeManager {
         return true;
     }
 
-    pub async fn register(&mut self, exch: Box<dyn AdapterCombo<'static>>)
+    pub async fn register(&mut self, exch: &mut Box<dyn AdapterCombo<'static>>)
                           -> Result<bool, BoxErrGlobal> {
-        let mut ex = exch;
-        // let name = ex.code();
-        // if self.exchanges.contains_key(ex.code()) {
-        //     return Ok(false);
-        // }
-        // let mut exchs = &mut self.exchanges;
-        // // exchs[name] = Box::new(ex);
-        // exchs.insert(name, ex.clone());
-        // let mut xpairs = &mut self.pair_map;
-        // let gpairs = ex.get_pairs();
-        // let apairs = gpairs.await;
-        // let xpairs = &mut apairs.unwrap();
-        let xpairs: Pairs = ex.get_pairs().await.unwrap();
-        // let statex: &'static Box<dyn AdapterCombo<'static>> = &exch;
-        for p in xpairs {
-            self.add_exchange_pair(exch.clone(), p.symbol());
+        // let excode: String = String::from(ex.code().clone());
+
+        // let mut origex: *mut dyn AdapterCombo<'a> = Box::into_raw(exch);
+        unsafe {
+            // let mut refex: &'a dyn AdapterCombo<'a> = origex.as_ref().unwrap();
+            // let mut newex: &mut Box<&'a dyn AdapterCombo<'a>> = &mut Box::new(refex.clone());
+            // let mut ex = exch;
+            // let name = ex.code();
+            // if self.exchanges.contains_key(ex.code()) {
+            //     return Ok(false);
+            // }
+            // let mut exchs = &mut self.exchanges;
+            // // exchs[name] = Box::new(ex);
+            // exchs.insert(name, ex.clone());
+            // let mut xpairs = &mut self.pair_map;
+            // let gpairs = ex.get_pairs();
+            // let apairs = gpairs.await;
+            // let xpairs = &mut apairs.unwrap();
+            let xpairs: Pairs = exch.get_pairs().await.unwrap();
+            // let statex: &'static Box<dyn AdapterCombo<'static>> = &exch;
+            for p in xpairs {
+                self.add_exchange_pair(exch, p.symbol());
+            }
         }
         Ok(true)
     }
@@ -127,10 +148,10 @@ impl<'a> ExchangeManager {
         xpairs.contains_key(&pair.symbol())
     }
 
-    pub fn get_exchange(&mut self, code: String) -> Option<&mut Box<&'static dyn AdapterCombo<'static>>> {
+    pub fn get_exchange(&mut self, code: String) -> Option<&mut Box<dyn AdapterCombo<'static>>> {
         // let mut exchs: &mut HashMap<String, &'static Box<dyn AdapterCombo<'static>>> = &mut self
         //             .exchanges;
-        let mut exchs: &mut Vec<Box<&'static dyn AdapterCombo<'static>>> = &mut self.exchanges;
+        let mut exchs: &mut Vec<Box<dyn AdapterCombo<'static>>> = &mut self.exchanges;
         for v in exchs {
             if v.code().to_ascii_lowercase() == code.to_ascii_uppercase() {
                 return Some(v);
@@ -151,9 +172,10 @@ impl<'a> ExchangeManager {
         // let mut ex: dyn StdExAdapter<'static> = Box::into_raw(_ex);
         // let mut ex: &mut &impl AdapterCombo<'a> = &mut _ex.deref().deref().deref();
         let mut _exch = self.get_exchange(exname.clone());
-        let mut exch: &mut Box<&'static dyn AdapterCombo<'static>> = _exch.unwrap();
-        let exrate = exch.get_rate(pair.from_coin.as_str(), pair.to_coin.as_str()).await?;
-
+        let exch: &mut Box<dyn AdapterCombo<'static>> = &mut _exch.unwrap();
+        // let mut exch = &mut _exch.as_ref().deref();
+        let mut _exrate = exch.get_rate(pair.from_coin.as_str(), pair.to_coin.as_str());
+        let exrate = _exrate.await?;
         // let exrate = exch.clone().get_rate(
         //     pair.from_coin.as_str(), pair.to_coin.as_str()
         // ).await.unwrap();
@@ -165,12 +187,12 @@ impl<'a> ExchangeManager {
     }
 
     pub async fn get_rate(&mut self, from_coin: &str, to_coin: &str)
-                          -> Result<ExchangeRateMap<'a>, BoxErrGlobal> {
+                          -> Result<HashMap<String, ExchangeRate>, BoxErrGlobal> {
         let pair = &Pair::from_str(from_coin, to_coin);
         let xpairs = &self.pair_map.clone();
         if xpairs.contains_key(pair.symbol().as_str()) {
             let pair_exs: Vec<String> = xpairs[&pair.symbol()].clone();
-            let mut ratemap: ExchangeRateMap = HashMap::new();
+            let mut ratemap: HashMap<String, ExchangeRate> = HashMap::new();
             for ex in pair_exs {
                 // let mut ex: &mut Box<dyn impl BaseExchangeAdapter<'a>> = &mut exchs[ex];
                 // let mut exch: &&Box<dyn AdapterCombo<'static>> = self.get_exchange(ex).unwrap();
@@ -186,20 +208,20 @@ impl<'a> ExchangeManager {
                 //     pair.from_coin.as_str(), pair.to_coin.as_str()
                 // ).await;
                 // let mut rateres = _rateres.await;
-                let rateres = &mut self._get_rate(ex, pair).await;
+                let rateres = self._get_rate(ex.clone(), pair).await;
 
                 if rateres.is_err() {
                     warn!("Failed to get exchange rate from exchange '{}'",
                           ex);
-                    warn!("Error from {} is: {}", ex, rateres.unwrap_err().to_string());
+                    warn!("Error from {} is: {}", ex.clone(), rateres.err().unwrap().to_string());
                     continue;
                 }
-                let xres = rateres.unwrap();
+                let xres = rateres.unwrap().clone();
                 // ratemap[excode] = xres;
-                ratemap.insert(xres.code.as_str(), xres.rate);
+                ratemap.insert(String::from(xres.code.as_str().clone()), xres.rate.clone());
             }
             if !ratemap.is_empty() {
-                return Ok(ratemap);
+                return Ok(ratemap.clone());
             }
         }
         Err(
