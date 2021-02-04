@@ -1,4 +1,4 @@
-use crate::exchange::{BaseExchangeAdapter, Pair, Pairs, ExchangeRate};
+use crate::exchange::{Pair, Pairs, ExchangeRate, AdapterMeta, AdapterPairs, AdapterLow, AdapterRate, AdapterCombo, AdapterFull, StdExAdapter};
 use crate::adapter_core;
 use serde::{Deserialize, Serialize};
 extern crate futures;
@@ -64,14 +64,119 @@ pub struct BittrexAdapter {
     pub market_api: String
 }
 
+impl BittrexAdapter {
+    pub fn new() -> Self {
+        BittrexAdapter {
+            market_api: String::from(BITTREX_API),
+            pair_map: HashMap::new(),
+            pairs: vec![]
+        }
+    }
+}
+
+
+impl Clone for BittrexAdapter {
+    fn clone(&self) -> BittrexAdapter {
+        BittrexAdapter {
+            pairs: self.pairs.clone(),
+            pair_map: self.pair_map.clone(),
+            market_api: self.market_api.clone()
+        }
+    }
+}
+
+
 pub async fn get_bittrex_pairs() -> Result<Vec<BittrexPair>, Box<dyn std::error::Error + Send + Sync>> {
     let raw_res: String = adapter_core::json_get_str(BITTREX_API, "/", "").await?;
     let res: Vec<BittrexPair> = serde_json::from_str(raw_res.as_str()).unwrap();
     Ok(res)
 }
 
+impl<'a> AdapterMeta<'a> for BittrexAdapter {
+    fn name(&self) -> &'a str { "Bittrex" }
+    fn code(&self) -> &'a str { "bittrex" }
+}
+
 #[async_trait]
-impl <'a> BaseExchangeAdapter<'a> for BittrexAdapter {
+impl AdapterRate for BittrexAdapter {
+    async fn get_rate(&mut self, from_coin: &str, to_coin: &str)
+        -> Result<ExchangeRate, Box<dyn std::error::Error + Send + Sync>>  {
+        let from_coin = from_coin.to_ascii_uppercase();
+        let to_coin = to_coin.to_ascii_uppercase();
+        let ticker_data: HashMap<String, String> = self.json_get(
+            format!("/{}-{}/ticker", from_coin, to_coin).as_str(), ""
+        ).await?;
+        Ok(ExchangeRate {
+            last: Decimal::from_str(ticker_data["lastTradeRate"].as_str()).unwrap(),
+            bid: Decimal::from_str(ticker_data["bidRate"].as_str()).unwrap(),
+            ask: Decimal::from_str(ticker_data["askRate"].as_str()).unwrap(),
+            pair: Pair {
+                from_coin: from_coin,
+                to_coin: to_coin
+            },
+            high: Decimal::new(0, 8),
+            low: Decimal::new(0, 8),
+            open: Decimal::new(0, 8),
+            close: Decimal::new(0, 8),
+            volume: Decimal::new(0, 8),
+        })
+    }
+}
+
+#[async_trait]
+impl AdapterPairs for BittrexAdapter {
+    async fn get_pairs(&mut self)
+            -> Result<Pairs, Box<dyn std::error::Error + Send + Sync>>  {
+        let pairlist: Vec<BittrexPair> = get_bittrex_pairs().await?;
+        // let mut new_pairs: Vec<Pair> = vec![];
+        let pairmap = &mut self.pair_map;
+        let selfpairs = &mut self.pairs;
+        selfpairs.clear();
+        // &mut self.pair_map;
+        for p in pairlist {
+            let np = Pair {
+                from_coin: p.baseCurrencySymbol.clone(),
+                to_coin: p.quoteCurrencySymbol.clone(),
+            };
+            selfpairs.push(np.clone());
+            let str_pair: String = format!("{}_{}", p.baseCurrencySymbol, p.quoteCurrencySymbol);
+
+            pairmap.insert(str_pair, np.clone());
+        }
+        Ok(selfpairs.to_vec())
+    }
+    async fn has_pair(&mut self, from_coin: &str, to_coin: &str)
+            -> Result<bool, Box<dyn std::error::Error + Send + Sync>>  {
+        if self.pairs.len() == 0 || self.pair_map.len() == 0 {
+            self.get_pairs().await?;
+        }
+        Ok(self.pair_map.contains_key(&format!("{}_{}", from_coin, to_coin)))
+    }
+}
+
+#[async_trait]
+impl AdapterLow for BittrexAdapter {
+    fn build_uri(&self, uri: &str, endpoint: &str) -> String  {
+        return adapter_core::build_uri(self.market_api.as_str(), uri, endpoint)
+    }
+    async fn json_get(&self, uri: &str, endpoint: &str)
+            -> Result<HashMap<String, String>, Box<dyn std::error::Error + Send + Sync>>
+             {
+        Ok(adapter_core::json_get(self.market_api.as_str(), uri, endpoint).await?)
+    }
+}
+
+impl <'a>AdapterCombo<'a> for BittrexAdapter {}
+
+impl <'a>AdapterFull<'a> for BittrexAdapter {}
+
+impl<'a>StdExAdapter<'a> for BittrexAdapter {}
+
+// impl StdExAdapter where Self: BittrexAdapter {}
+
+/*
+#[async_trait]
+impl<'a, T: 'a + BaseExchangeAdapter<'a, T>> BaseExchangeAdapter<'a, T> for BittrexAdapter {
     // const MARKET_API: &'a str = BITTREX_API;
     fn name(&self) -> &'a str {
         "Bittrex"
@@ -106,13 +211,6 @@ impl <'a> BaseExchangeAdapter<'a> for BittrexAdapter {
         Ok(selfpairs.to_vec())
     }
 
-    async fn has_pair(&mut self, from_coin: &str, to_coin: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        if self.pairs.len() == 0 || self.pair_map.len() == 0 {
-            self.get_pairs().await?;
-        }
-        Ok(self.pair_map.contains_key(&format!("{}_{}", from_coin, to_coin)))
-    }
-
     async fn get_rate(&mut self, from_coin: &str, to_coin: &str) -> Result<ExchangeRate, Box<dyn std::error::Error + Send + Sync>> {
         let from_coin = from_coin.to_ascii_uppercase();
         let to_coin = to_coin.to_ascii_uppercase();
@@ -132,6 +230,13 @@ impl <'a> BaseExchangeAdapter<'a> for BittrexAdapter {
             close: Decimal::new(0, 8),
             volume: Decimal::new(0, 8),
         })
+    }
+
+    async fn has_pair(&mut self, from_coin: &str, to_coin: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        if self.pairs.len() == 0 || self.pair_map.len() == 0 {
+            self.get_pairs().await?;
+        }
+        Ok(self.pair_map.contains_key(&format!("{}_{}", from_coin, to_coin)))
     }
 
     fn new() -> Self {
@@ -155,6 +260,7 @@ impl <'a> BaseExchangeAdapter<'a> for BittrexAdapter {
     }
     
 }
+*/
 
 pub fn new() -> BittrexAdapter {
     unsafe {

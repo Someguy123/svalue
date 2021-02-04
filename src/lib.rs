@@ -1,3 +1,4 @@
+#![feature(allocator_api)]
 #[macro_use] extern crate rocket;
 // #![feature(proc_macro_hygiene, decl_macro)]
 // #![feature(toowned_clone_into)]
@@ -36,11 +37,13 @@
 // use crate::adapter_core;
 // use crate::exchange;
 // use crate::Bittrex;
+// use crate::exchanges;
 pub mod adapter_core;
 pub mod exchange;
-pub mod Bittrex;
-pub mod huobi_test;
-pub mod Huobi;
-pub mod Kraken;
+pub mod exchanges;
+// pub mod exchanges;
+// pub mod huobi_test;
+// pub mod Huobi;
+// pub mod Kraken;
 // pub mod main;
 

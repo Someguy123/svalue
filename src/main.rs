@@ -1,12 +1,16 @@
-use svalue::Bittrex;
-use svalue::Bittrex::BittrexAdapter;
-use svalue::Huobi;
-use svalue::Huobi::HuobiAdapter;
-use svalue::Kraken;
-use svalue::Kraken::KrakenCore;
+// use svalue::Bittrex;
+// use svalue::Bittrex::BittrexAdapter;
+// use svalue::Huobi;
+// use svalue::Huobi::HuobiAdapter;
+// use svalue::Kraken;
+// use svalue::Kraken::{KrakenAdapter};
 // use svalue::Bittrex::BaseExchangeAdapter;
-use svalue::exchange::BaseExchangeAdapter;
-use svalue::exchange::{Pair, Pairs};
+use svalue::exchange::{Pair, Pairs, StdExAdapter, AdapterCombo};
+use svalue::exchanges;
+use svalue::exchanges::{ADAPTERS, ExchangeManager};
+use log::{info, trace, warn};
+use svalue::adapter_core::BoxErrGlobal;
+
 // use svalue::huobi_test::get_ticker;
 // use svalue::Bittrex::BittrexAdapter;
 
@@ -23,15 +27,45 @@ fn test_pairs() -> Pairs {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), std::io::Error> {
     // let _res = Bittrex::get_bittrex_pairs("https://api.bittrex.com/v3/markets", "/", "").await;
     let tpairs: Pairs = test_pairs();
+    // type xadapters = impl KrakenAdapter + HuobiAdapter + BittrexAdapter;
+    let mut exm = ExchangeManager::new();
+    for a in ADAPTERS {
+        // unsafe {
+            // let _adp: *mut Option<dyn AdapterCombo> = Box::into_raw(a);
+            // if let Some(adp) = _adp {
+        exm.register(a.clone().as_mut())
+            // }
+        // }
+    }
+    // exm.register(&mut KrakenAdapter::new()).await?;
+    // exm.register(&mut HuobiAdapter::new()).await?;
+    // exm.register(&mut BittrexAdapter::new()).await?;
 
+    for p in tpairs {
+        println!();
+        let lp = exm.get_rate(
+            p.from_coin.as_str(), p.to_coin.as_str()
+        ).await;
+        if lp.is_err() {
+            warn!("Failed to get exchange rate for pair: {}", p);
+            warn!("Error for pair {} is: {}", p, lp.unwrap_err().to_string());
+            continue;
+        }
+        let lres = lp.unwrap();
+        println!("Exchange rates for pair {} are: {:#?}", p, lres);
+    }
+    Ok(())
+    /*
     let mut kc: KrakenCore = KrakenCore::new();
 
     // let lp = kc.load_pairs().await.unwrap();
     let lp = kc.get_ticker_main("DOGE", "BTC").await.unwrap();
     println!("Kraken pairs: {:#?}", lp);
+    */
+
     /*
     let mut hb = Huobi::new();
     let mut btx = Bittrex::new();

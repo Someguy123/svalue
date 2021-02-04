@@ -10,12 +10,18 @@ extern crate serde;
 
 // use rust_decimal::Decimal;
 use std::str;
+use std::error::Error;
+use std::alloc::Global;
 // use std::str::FromStr;
 // use std::fmt;
 use std::collections::HashMap;
+use self::serde::de::StdError;
 // use async_trait::async_trait;
 // use serde::{Deserialize, Serialize};
 
+pub type BoxErr = Box<dyn std::error::Error + Send + Sync>;
+pub type BoxErrGlobal = Box<dyn Error + Send + Sync, Global>;
+pub type BoxErrStd = Box<dyn StdError + Sync + std::marker::Send>;
 
 pub fn build_uri(market_api: &str, uri: &str, endpoint: &str) -> String {
     // let mut market_api: String = market_api.parse().unwrap();

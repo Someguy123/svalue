@@ -1,5 +1,7 @@
-use crate::exchange::{BaseExchangeAdapter, Pair, Pairs, ExchangeRate, PairNotFound};
+use crate::exchange::{Pair, Pairs, ExchangeRate, PairNotFound, AdapterMeta, AdapterRate, AdapterLow, AdapterPairs, AdapterCombo, AdapterFull, StdExAdapter};
 use crate::adapter_core;
+use crate::adapter_core::BoxErr;
+use crate::adapter_core::BoxErrGlobal;
 use serde::{Deserialize, Serialize};
 extern crate futures;
 extern crate tokio_core;
@@ -19,12 +21,14 @@ use rust_decimal::prelude::FromPrimitive;
 use async_trait::async_trait;
 
 use std::panic;
+use std::collections::hash_map::RandomState;
+use std::error::Error;
+use std::alloc::Global;
 
 const KRAKEN_BASE: &str = "https://api.kraken.com/0/public";
 const KRAKEN_PAIRS: &str = "https://api.kraken.com/0/public/AssetPairs?info=fees";
 const KRAKEN_TICKER: &str = "https://api.kraken.com/0/public/Ticker?pair=";
 
-type BoxErr = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct KrakenPairs {
@@ -50,20 +54,59 @@ pub struct KrakenTickerTick {
     volume: Vec<String>,
 }
 
+impl KrakenTickerTick {
+    fn close(&self) -> String {
+        self.last.get(0).unwrap().to_string()
+    }
+}
+
+impl Clone for KrakenTickerTick {
+    fn clone(&self) -> KrakenTickerTick {
+        // { ask, bid, last, open, high, low, volume }
+        KrakenTickerTick {
+            ask: self.ask.clone(),
+            bid: self.bid.clone(),
+            last: self.last.clone(),
+            open: self.open.clone(),
+            high: self.high.clone(),
+            low: self.low.clone(),
+            volume: self.volume.clone()
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct KrakenTicker {
     error: Vec<String>,
     result: HashMap<String, KrakenTickerTick>
 }
 
-pub struct KrakenCore<'a> {
+pub struct KrakenAdapter<'a> {
     provides: Vec<String>,
     pairs: Vec<String>,
+    obj_pairs: Pairs,
     symbol_map: HashMap<&'a str, &'a str>,
     symbol_map_expected: HashMap<&'a str, Vec<&'a str>>,
     symbol_map_keys: Vec<&'a str>,
     known_bases: Vec<&'a str>,
-    known_pairs: HashMap<&'a str, &'a str>
+    known_pairs: HashMap<&'a str, &'a str>,
+    market_api: &'a str,
+}
+
+impl<'a> Clone for KrakenAdapter<'a> {
+    fn clone(&self) -> KrakenAdapter<'a> {
+        KrakenAdapter {
+            provides: self.provides.clone(),
+            pairs: self.pairs.clone(),
+            obj_pairs: self.obj_pairs.clone(),
+            symbol_map: self.symbol_map.clone(),
+            symbol_map_expected: self.symbol_map_expected.clone(),
+            symbol_map_keys: self.symbol_map_keys.clone(),
+            known_bases: self.known_bases.clone(),
+            known_pairs: self.known_pairs.clone(),
+            market_api: self.market_api
+        }
+    }
 }
 
 pub fn find_base(pair: &str, known_bases: Vec<&str>) -> Option<String> {
@@ -77,7 +120,9 @@ pub fn find_base(pair: &str, known_bases: Vec<&str>) -> Option<String> {
 }
 
 // #[async_trait]
-impl <'a>KrakenCore<'a> {
+
+
+impl <'a>KrakenAdapter<'a> {
     pub async fn _load_pairs(&mut self) -> Result<Vec<String>, BoxErr> {
         let resp: reqwest::Response = reqwest::get(KRAKEN_PAIRS).await.unwrap();
         let body: String = resp.text().await.unwrap();
@@ -104,10 +149,13 @@ impl <'a>KrakenCore<'a> {
     //     }
     //     return None
     // }
-    pub async fn load_pairs(&mut self) -> Result<Vec<String>, BoxErr> {
+    pub async fn load_pairs(&mut self, force: bool) -> Result<Vec<String>, BoxErr> {
         self._load_pairs().await?;
         let selfpairs = self.pairs.clone();
-        let mut selfprov = &mut self.provides;
+        let selfprov = &mut self.provides;
+        if !selfprov.is_empty() && !force {
+            return Ok(selfprov.clone());
+        }
         selfprov.clear();
         for pair in selfpairs {
             let b = find_base(pair.as_str().clone(), self.known_bases.clone()).clone();
@@ -150,14 +198,16 @@ impl <'a>KrakenCore<'a> {
         Ok(v)
     }
 
-    pub async fn get_ticker_main(&mut self, from_coin: &str, to_coin: &str) -> Result<KrakenTicker, BoxErr> {
+    pub async fn get_ticker_main(&mut self, from_coin: &str, to_coin: &str)
+            -> Result<KrakenTickerTick, BoxErr> {
         let from_coin = String::from(from_coin).to_ascii_uppercase();
         let to_coin = String::from(to_coin).to_ascii_uppercase();
         let mut symx = format!("{from_coin}_{to_coin}", from_coin=from_coin, to_coin=to_coin);
         if self.known_pairs.contains_key(&symx.as_str()) {
             let xpair = self.known_pairs[symx.as_str()];
             println!("Found pair {} in known_pairs", xpair);
-            return Ok(self.get_ticker(xpair).await?)
+            let tres = self.get_ticker(xpair).await?;
+            return Ok(tres.result[xpair].clone())
         }
         let mut from_coins = vec![from_coin.as_str()];
         let mut to_coins = vec![to_coin.as_str()];
@@ -178,7 +228,7 @@ impl <'a>KrakenCore<'a> {
                 // let symk = symk.as_mut_str();
                 // let bs = &self;
                 // const tkcall: dyn Future<Result<KrakenTicker, BoxErr>> = self.get_ticker(fsym);
-                let kcore = KrakenCore::new();
+                let kcore = KrakenAdapter::new();
                 // let mut tkcall = KrakenCore::new().get_ticker(fsym.clone());
                 let result = panic::catch_unwind(|| {
                     // let res: Result<KrakenTicker, BoxErr> = kcore.get_ticker(fsym).await;
@@ -205,7 +255,7 @@ impl <'a>KrakenCore<'a> {
                 // let knwpairs = &mut self.known_pairs;
                 // &knwpairs.insert(fsym, symk);
                 let unwrapped = res.unwrap();
-                return Ok(unwrapped);
+                return Ok(unwrapped.result[fsym].clone());
             }
         }
         Err(Box::new(PairNotFound::new(format!("{} / {}", from_coin, to_coin).as_str())))
@@ -266,18 +316,150 @@ impl <'a>KrakenCore<'a> {
             ("USD_CAD", "USDTCAD"),
         ].iter().cloned().collect();
 
-        KrakenCore {
+        KrakenAdapter {
             provides: vec![],
             pairs: vec![],
-            symbol_map: symbol_map,
-            symbol_map_keys: symbol_map_keys,
-            symbol_map_expected: symbol_map_expected,
-            known_bases: known_bases,
-            known_pairs: known_pairs
+            obj_pairs: vec![],
+            market_api: KRAKEN_BASE,
+            symbol_map,
+            symbol_map_keys,
+            symbol_map_expected,
+            known_bases,
+            known_pairs
         }
     }
 }
 
-// pub async fn get_huobi_pairs() -> Result<Vec<HuobiPair>, Box<dyn std::error::Error + Send + Sync>> {
+impl<'a> AdapterMeta<'a> for KrakenAdapter<'_> {
+    fn name(&self) -> &'a str { "Kraken" }
+
+    fn code(&self) -> &'a str { "kraken" }
+}
+
+#[async_trait]
+impl AdapterRate for KrakenAdapter<'_> {
+    async fn get_rate(&mut self, from_coin: &str, to_coin: &str)
+            -> Result<ExchangeRate, BoxErrGlobal>  {
+        let ktick = self.get_ticker_main(
+            from_coin.to_ascii_uppercase().as_str(), to_coin.to_ascii_uppercase().as_str()
+        ).await?;
+        Ok(
+            ExchangeRate {
+                last: Decimal::from_str(ktick.last[0].as_str()).unwrap(),
+                bid: Decimal::from_str(ktick.bid[0].as_str()).unwrap(),
+                ask: Decimal::from_str(ktick.ask[0].as_str()).unwrap(),
+                low: Decimal::from_str(ktick.low[0].as_str()).unwrap(),
+                high: Decimal::from_str(ktick.high[0].as_str()).unwrap(),
+                volume: Decimal::from_str(ktick.volume[0].as_str()).unwrap(),
+                open: Decimal::from_str(ktick.open.as_str()).unwrap(),
+                close: Decimal::from_str(ktick.close().as_str()).unwrap(),
+                pair: Pair::from_str(from_coin, to_coin)
+            }
+        )
+    }
+}
+
+#[async_trait]
+impl AdapterLow for KrakenAdapter<'_> {
+    fn build_uri(&self, uri: &str, endpoint: &str) -> String  {
+        return adapter_core::build_uri(self.market_api, uri, endpoint)
+    }
+
+    async fn json_get(&self, uri: &str, endpoint: &str)
+            -> Result<HashMap<String, String>, BoxErr>  {
+        Ok(adapter_core::json_get(self.market_api, uri, endpoint).await?)
+    }
+}
+
+#[async_trait]
+impl AdapterPairs for KrakenAdapter<'_> {
+    async fn get_pairs(&mut self) -> Result<Pairs, BoxErrGlobal>  {
+        if self.obj_pairs.is_empty() {
+            let pairs = self.load_pairs(false).await?;
+            let opairs: &mut Vec<Pair> = &mut self.obj_pairs;
+            for p in pairs {
+                opairs.insert(opairs.len(), Pair::from_symbol(p.as_str()));
+            }
+        }
+        Ok(self.obj_pairs.clone())
+    }
+    async fn has_pair(&mut self, from_coin: &str, to_coin: &str)
+            -> Result<bool, BoxErrGlobal>  {
+        Ok(self.pairs.contains(&Pair::from_str(from_coin, to_coin).symbol()))
+    }
+}
+
+impl<'a> AdapterCombo<'a> for KrakenAdapter<'_> {}
+
+impl<'a> AdapterFull<'a> for KrakenAdapter<'_> {}
+
+impl<'a>StdExAdapter<'a> for KrakenAdapter<'_> {}
+
+
+/*
+#[async_trait]
+impl<'a, T: 'a + BaseExchangeAdapter<'a, T>> BaseExchangeAdapter<'a, T> for KrakenAdapter<'a> {
+
+    fn name(&self) -> &'a str { "Kraken" }
+
+    fn code(&self) -> &'a str { "kraken" }
+
+    fn build_uri(&self, uri: &str, endpoint: &str) -> String {
+        return adapter_core::build_uri(self.market_api, uri, endpoint)
+    }
+
+    async fn json_get(&self, uri: &str, endpoint: &str) -> Result<HashMap<String, String>, BoxErr> {
+        Ok(adapter_core::json_get(self.market_api, uri, endpoint).await?)
+    }
+
+    async fn get_pairs(&mut self) -> Result<Pairs, BoxErrGlobal> {
+        if self.obj_pairs.is_empty() {
+            let pairs = self.load_pairs(false).await?;
+            let opairs: &mut Vec<Pair> = &mut self.obj_pairs;
+            for p in pairs {
+                opairs.insert( opairs.len(), Pair::from_symbol(p.as_str()));
+            }
+        }
+        Ok(self.obj_pairs.clone())
+    }
+
+    async fn get_rate(&mut self, from_coin: &str, to_coin: &str) -> Result<ExchangeRate, BoxErrGlobal> {
+        let ktick = self.get_ticker_main(
+            from_coin.to_ascii_uppercase().as_str(), to_coin.to_ascii_uppercase().as_str()
+        ).await?;
+        Ok(
+            ExchangeRate {
+                last: Decimal::from_str(ktick.last[0].as_str()).unwrap(),
+                bid: Decimal::from_str(ktick.bid[0].as_str()).unwrap(),
+                ask: Decimal::from_str(ktick.ask[0].as_str()).unwrap(),
+                low: Decimal::from_str(ktick.low[0].as_str()).unwrap(),
+                high: Decimal::from_str(ktick.high[0].as_str()).unwrap(),
+                volume: Decimal::from_str(ktick.volume[0].as_str()).unwrap(),
+                open: Decimal::from_str(ktick.open.as_str()).unwrap(),
+                close: Decimal::from_str(ktick.close().as_str()).unwrap(),
+                pair: Pair::from_str(from_coin, to_coin)
+            }
+        )
+    }
+
+    async fn has_pair(&mut self, from_coin: &str, to_coin: &str) -> Result<bool, BoxErrGlobal> {
+        Ok(self.pairs.contains(&Pair::from_str(from_coin, to_coin).symbol()))
+    }
+
+    fn new() -> Self {
+        KrakenAdapter::new()
+    }
+}
+
+*/
+
+
+pub fn new<'a>() -> KrakenAdapter<'a> {
+    unsafe {
+        KrakenAdapter::new()
+    }
+}
+
+// pub async fn get_huobi_pairs() -> Result<Vec<HuobiPair>, BoxErr> {
 
 // }

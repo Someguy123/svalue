@@ -1669,6 +1669,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures 0.3.12",
+ "log 0.4.13",
  "reqwest",
  "rocket",
  "rust_decimal",
