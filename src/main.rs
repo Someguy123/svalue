@@ -7,7 +7,7 @@
 // use svalue::Bittrex::BaseExchangeAdapter;
 use svalue::exchange::{Pair, Pairs, StdExAdapter, AdapterCombo};
 use svalue::exchanges;
-use svalue::exchanges::{ BittrexAdapter, KrakenAdapter, HuobiAdapter};
+use svalue::exchanges::{ BittrexAdapter, KrakenAdapter, HuobiAdapter, ExchangeManager };
 use log::{info, trace, warn};
 use svalue::adapter_core::BoxErrGlobal;
 
@@ -36,7 +36,8 @@ async fn main() -> Result<(), std::io::Error> {
     ];
     let tpairs: Pairs = test_pairs();
     // type xadapters = impl KrakenAdapter + HuobiAdapter + BittrexAdapter;
-    // let mut exm = ExchangeManager::new();
+    let mut exm = ExchangeManager::new();
+
     for a in adapters {
         // unsafe {
             // let _adp: *mut Option<dyn AdapterCombo> = Box::into_raw(a);
@@ -44,22 +45,26 @@ async fn main() -> Result<(), std::io::Error> {
         // exm.register(a.clone().as_mut())
             // }
         // }
-        let mut adp = a;
+        exm.register(a);
 
-        for p in &tpairs {
-            println!();
-            let lp = adp.get_rate(
-                p.from_coin.as_str(), p.to_coin.as_str()
-            ).await;
-            if lp.is_err() {
-                warn!("Failed to get exchange rate for pair: {}", p);
-                warn!("Error for pair {} is: {}", p, lp.unwrap_err().to_string());
-                continue;
-            }
-            let lres = lp.unwrap();
-            println!("( {} ) Exchange rates for pair {} are: {:#?}", adp.name(), p, lres);
-        }
+        // let mut adp = a;
+
+
     }
+    for p in &tpairs {
+        println!();
+        let lp = exm.get_rate(
+            p.from_coin.as_str(), p.to_coin.as_str()
+        ).await;
+        if lp.is_err() {
+            warn!("Failed to get exchange rate for pair: {}", p);
+            warn!("Error for pair {} is: {}", p, lp.unwrap_err().to_string());
+            continue;
+        }
+        let lres = lp.unwrap();
+        println!("Exchange rates for pair {} are: {:#?}", p, lres);
+    }
+
     // exm.register(&mut KrakenAdapter::new()).await?;
     // exm.register(&mut HuobiAdapter::new()).await?;
     // exm.register(&mut BittrexAdapter::new()).await?;

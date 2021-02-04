@@ -2,12 +2,13 @@
 pub mod bittrex;
 pub mod kraken;
 pub mod huobi;
+mod manager;
 // pub mod manager;
 
 pub use bittrex::BittrexAdapter;
 pub use kraken::KrakenAdapter;
 pub use huobi::HuobiAdapter;
-// pub use manager::{AdapterBox, ExchangeManager};
+pub use manager::{ExchangeManager};
 
 use crate::exchange::{StdExAdapter, AdapterCombo};
 
